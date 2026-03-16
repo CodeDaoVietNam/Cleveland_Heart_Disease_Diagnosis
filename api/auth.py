@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -9,35 +9,41 @@ from fastapi.security import OAuth2PasswordBearer
 # ==========================================
 # CẤU HÌNH BẢO MẬT JWT
 # ==========================================
-# SECRET_KEY: Chuỗi bí mật dùng để mã hoá token. Trong thực tế nên đặt trong .env
 SECRET_KEY = "e2e-heart-disease-super-secret-key-2026"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Token hết hạn sau 60 phút
-
-# Mã hoá mật khẩu bằng bcrypt (chuẩn công nghiệp)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # OAuth2 scheme: FastAPI tự động đọc token từ Header "Authorization: Bearer <token>"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # ==========================================
+# HÀM MÃ HOÁ MẬT KHẨU (dùng bcrypt trực tiếp)
+# ==========================================
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+# ==========================================
 # DATABASE GIẢ LẬP (Demo - Thực tế dùng PostgreSQL)
 # ==========================================
-# Mật khẩu đã được hash bằng bcrypt. Plaintext gốc:
-#   admin -> "admin123"
-#   doctor -> "doctor123"
+# Tạo hash trước để tránh hash lại mỗi lần import
+_admin_hash = hash_password("admin123")
+_doctor_hash = hash_password("doctor123")
+
 fake_users_db = {
     "admin": {
         "username": "admin",
         "full_name": "System Administrator",
         "role": "admin",
-        "hashed_password": pwd_context.hash("admin123"),
+        "hashed_password": _admin_hash,
     },
     "doctor": {
         "username": "doctor",
         "full_name": "Dr. Nguyen Van A",
         "role": "doctor",
-        "hashed_password": pwd_context.hash("doctor123"),
+        "hashed_password": _doctor_hash,
     },
 }
 
@@ -59,10 +65,6 @@ class UserOut(BaseModel):
 # ==========================================
 # CÁC HÀM XỬ LÝ LOGIC
 # ==========================================
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """So sánh mật khẩu gốc với mật khẩu đã mã hoá"""
-    return pwd_context.verify(plain_password, hashed_password)
-
 def authenticate_user(username: str, password: str):
     """Xác thực người dùng: tìm trong DB, kiểm tra mật khẩu"""
     user = fake_users_db.get(username)
@@ -73,10 +75,7 @@ def authenticate_user(username: str, password: str):
     return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Tạo JWT Token.
-    Token chứa: username + thời gian hết hạn + chữ ký mã hoá.
-    """
+    """Tạo JWT Token chứa username + thời gian hết hạn"""
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
@@ -85,9 +84,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """
-    Dependency Injection: Hàm này tự động chạy TRƯỚC mỗi endpoint được bảo vệ.
-    Nó giải mã token, kiểm tra username có hợp lệ không.
-    Nếu token sai/hết hạn -> trả lỗi 401 Unauthorized.
+    Dependency Injection: Giải mã token, kiểm tra username.
+    Token sai/hết hạn -> trả lỗi 401 Unauthorized.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

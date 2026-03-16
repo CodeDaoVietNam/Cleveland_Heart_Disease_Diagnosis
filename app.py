@@ -21,6 +21,72 @@ configure_llm(os.getenv("GEMINI_API_KEY"))
 init_db()
 
 # ==========================================
+# JWT AUTHENTICATION (Frontend Login)
+# ==========================================
+def get_auth_headers():
+    """Trả về header chứa JWT Token nếu đã đăng nhập."""
+    token = st.session_state.get('jwt_token')
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
+def login_page():
+    """Trang đăng nhập chuyên nghiệp cho hệ thống."""
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+        .login-header {
+            font-size: 36px; color: #E63946; text-align: center;
+            font-weight: 800; margin-top: 60px; margin-bottom: 5px;
+        }
+        .login-sub {
+            font-size: 16px; color: #457B9D; text-align: center;
+            margin-bottom: 40px;
+        }
+        .login-box {
+            max-width: 420px; margin: 0 auto; padding: 30px;
+            background: #F1FAEE; border-radius: 16px;
+            border: 1px solid #A8DADC; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="login-header">❤️ HỆ THỐNG CHẨN ĐOÁN TIM MẠCH</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-sub">Vui lòng đăng nhập để truy cập cổng chẩn đoán y tế lâm sàng</div>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        with st.container():
+            st.markdown("#### 🔐 Đăng nhập hệ thống")
+            username = st.text_input("Tên đăng nhập", placeholder="Ví dụ: doctor")
+            password = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu")
+
+            if st.button("Đăng nhập", type="primary", use_container_width=True):
+                if not username or not password:
+                    st.warning("Vui lòng nhập đầy đủ thông tin.")
+                    return
+
+                backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                try:
+                    res = requests.post(f"{backend_url}/auth/login", data={
+                        "username": username,
+                        "password": password
+                    })
+                    if res.status_code == 200:
+                        st.session_state.jwt_token = res.json()["access_token"]
+                        st.session_state.logged_in = True
+                        st.session_state.username = username
+                        st.rerun()
+                    else:
+                        st.error("❌ Sai tên đăng nhập hoặc mật khẩu!")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Không thể kết nối Backend API. Hãy chạy `uvicorn api.main:app --port 8000` trước.")
+
+            st.markdown("---")
+            st.caption("Tài khoản demo: `doctor` / `doctor123` hoặc `admin` / `admin123`")
+
+# ==========================================
 # CẤU HÌNH GIAO DIỆN STREAMLIT
 # ==========================================
 st.set_page_config(
@@ -231,7 +297,7 @@ def main():
                 backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                 
                 try:
-                    response = requests.post(f"{backend_url}/predict", json=transformed_data)
+                    response = requests.post(f"{backend_url}/predict", json=transformed_data, headers=get_auth_headers())
                     response.raise_for_status()
                 except requests.exceptions.RequestException as req_err:
                     st.error(f"❌ Không thể kết nối tới Backend API. Vui lòng kiểm tra server. Chi tiết lỗi: {req_err}")
@@ -297,7 +363,7 @@ def main():
             
             with st.spinner("Đang render Waterfall Explainer bằng SHAP từ API Server..."):
                 try:
-                    shap_res = requests.post(f"{backend_url}/explain", json=transformed_data)
+                    shap_res = requests.post(f"{backend_url}/explain", json=transformed_data, headers=get_auth_headers())
                     if shap_res.status_code == 200:
                         st.image(shap_res.content, use_container_width=True)
                     else:
@@ -344,4 +410,14 @@ def main():
             st.error(f"❌ Đã xảy ra lỗi hệ thống trong khối xử lý lõi: {e}")
 
 if __name__ == '__main__':
-    main()
+    if st.session_state.get('logged_in'):
+        # Hiển thị nút đăng xuất trên sidebar
+        with st.sidebar:
+            st.markdown(f"**👤 Xin chào, {st.session_state.get('username', 'User')}**")
+            if st.button("🚪 Đăng xuất"):
+                for key in ['jwt_token', 'logged_in', 'username']:
+                    st.session_state.pop(key, None)
+                st.rerun()
+        main()
+    else:
+        login_page()

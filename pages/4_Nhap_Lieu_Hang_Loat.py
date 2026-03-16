@@ -43,7 +43,17 @@ if uploaded_file is not None:
             with st.spinner("Hết nối máy chủ API chạy chẩn đoán lớn..."):
                 backend_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                 
-                res = requests.post(f"{backend_url}/batch_predict", json=batch_payload)
+                # Auto-login to get JWT token
+                auth_headers = {}
+                try:
+                    login_res = requests.post(f"{backend_url}/auth/login", data={"username": "doctor", "password": "doctor123"})
+                    if login_res.status_code == 200:
+                        token = login_res.json()["access_token"]
+                        auth_headers = {"Authorization": f"Bearer {token}"}
+                except Exception:
+                    pass
+                
+                res = requests.post(f"{backend_url}/batch_predict", json=batch_payload, headers=auth_headers)
                 if res.status_code == 200:
                     results = res.json()
                     
