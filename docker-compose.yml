@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  backend-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mla_heart_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  frontend-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: mla_heart_ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - BACKEND_URL=http://backend-api:8000
+    depends_on:
+      backend-api:
+        condition: service_healthy
