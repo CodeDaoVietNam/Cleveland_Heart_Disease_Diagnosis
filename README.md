@@ -129,7 +129,7 @@ The system predicts the probability of heart disease using the UCI Cleveland Hea
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/<your-username>/Cleveland_Heart_Disease_Diagnosis.git
+git clone https://github.com/CodeDaoVietNam/Cleveland_Heart_Disease_Diagnosis.git
 cd Cleveland_Heart_Disease_Diagnosis
 ```
 
