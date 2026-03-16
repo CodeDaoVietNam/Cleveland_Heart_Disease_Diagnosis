@@ -37,6 +37,11 @@ models/*.h5
 
 # Logs
 *.log
+logs/
+
+# MLflow
+mlruns/
+mlartifacts/
 
 # OS generated files
 .DS_Store

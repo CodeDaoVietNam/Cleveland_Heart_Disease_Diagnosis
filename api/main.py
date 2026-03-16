@@ -1,8 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import Response
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import List
-from pydantic import BaseModel
+from api.auth import (
+    authenticate_user, create_access_token, get_current_user,
+    Token, UserOut
+)
 import joblib
 import pandas as pd
 from pathlib import Path
@@ -42,8 +46,33 @@ class PatientInput(BaseModel):
 def read_root():
     return {"status": "Backend API is running", "model_loaded": model is not None}
 
+# ==========================================
+# AUTHENTICATION ENDPOINTS (PUBLIC)
+# ==========================================
+@app.post("/auth/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    Đăng nhập: Gửi username + password, nhận về JWT Token.
+    Dùng token này gắn vào Header để gọi các API bảo mật.
+    """
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sai tên đăng nhập hoặc mật khẩu.")
+    access_token = create_access_token(data={"sub": user["username"]})
+    logger.info(f"AUTH :: Người dùng '{user['username']}' đăng nhập thành công.")
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/me", response_model=UserOut)
+def read_users_me(current_user: dict = Depends(get_current_user)):
+    """Xem thông tin tài khoản hiện tại (cần token)"""
+    return UserOut(**current_user)
+
+# ==========================================
+# PROTECTED ENDPOINTS (CẦN TOKEN)
+# ==========================================
+
 @app.post("/predict")
-def predict_heart_disease(patient: PatientInput):
+def predict_heart_disease(patient: PatientInput, current_user: dict = Depends(get_current_user)):
     """
     Inference endpoint: Accepts JSON payload, returns prediction score
     """
@@ -70,7 +99,7 @@ def predict_heart_disease(patient: PatientInput):
     }
 
 @app.post("/explain")
-def explain_heart_disease(patient: PatientInput):
+def explain_heart_disease(patient: PatientInput, current_user: dict = Depends(get_current_user)):
     """
     Explainability endpoint: Returns a SHAP waterfall plot as an image
     """
@@ -101,7 +130,7 @@ def explain_heart_disease(patient: PatientInput):
     return Response(content=buf.getvalue(), media_type="image/png")
 
 @app.post("/batch_predict")
-def batch_predict(patients: List[PatientInput]):
+def batch_predict(patients: List[PatientInput], current_user: dict = Depends(get_current_user)):
     """
     Nhận 1 danh sách dữ liệu bệnh nhân và tính toán trả về hàng loạt
     """
