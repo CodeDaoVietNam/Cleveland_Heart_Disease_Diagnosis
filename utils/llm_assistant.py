@@ -16,7 +16,6 @@ def configure_llm(api_key):
     return False
 
 def get_medical_advice(raw_input_data, risk_prob):
-    global global_client
     if not global_client:
         return "Lỗi: Chưa có API Key hợp lệ được cấu hình. Vui lòng kiểm tra file .env hoặc cấu hình hệ thống."
         
@@ -43,7 +42,6 @@ def get_medical_advice(raw_input_data, risk_prob):
         return f"Lỗi trong quá trình chạy Model từ Google GenAI API: {e}. Vui lòng thử lại sau hoặc kiểm tra kết nối."
 
 def get_patient_care_plan(raw_input_data, risk_prob):
-    global global_client
     if not global_client:
         return "Lỗi: Chưa có API Key hợp lệ được cấu hình."
         
